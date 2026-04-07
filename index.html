@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CityTransit - Аналіз EVM (SPI та CPI)</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Urbanist:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* BASE STYLES */
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            background-color: #05080f;
+            color: #D1D5DB;
+            font-family: 'Urbanist', sans-serif;
+            line-height: 1.6;
+            padding: 40px 20px;
+            display: flex;
+            justify-content: center;
+            overflow-x: hidden;
+        }
+        .container { width: 100%; max-width: 1280px; display: flex; flex-direction: column; gap: 40px; }
+
+        /* TYPOGRAPHY */
+        h1, h2, h3, h4 { color: #F9FAFB; font-weight: 700; margin-bottom: 15px; }
+        h1 { font-size: 42px; text-align: center; color: #00E5FF; margin-bottom: 5px; }
+        h2 { font-size: 28px; border-bottom: 2px solid rgba(0, 229, 255, 0.2); padding-bottom: 10px; color: #F9FAFB; }
+        h2 span { color: #00E5FF; }
+        h3 { font-size: 20px; color: #3B82F6; }
+        p { font-size: 16px; margin-bottom: 10px; }
+        strong { color: #F9FAFB; }
+
+        /* SECTIONS & CARDS */
+        .section-card {
+            background-color: #0B0F19;
+            border: 1px solid #1F2937;
+            border-radius: 16px;
+            padding: 40px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            position: relative;
+        }
+        .section-card::before {
+            background: radial-gradient(circle at top right, rgba(0, 229, 255, 0.05) 0%, transparent 50%);
+            content: ''; height: 100%; left: 0; position: absolute; top: 0; width: 100%; pointer-events: none; z-index: 0;
+        }
+        .section-card > * { position: relative; z-index: 1; }
+
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; }
+        
+        .info-box {
+            background-color: #111827;
+            border-left: 4px solid #00E5FF;
+            padding: 20px;
+            border-radius: 0 8px 8px 0;
+            margin-bottom: 20px;
+            transition: transform 0.3s ease;
+        }
+        .info-box:hover { transform: translateY(-3px); }
+
+        .card {
+            background-color: #111827;
+            border: 1px solid #1F2937;
+            border-radius: 12px;
+            padding: 25px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* TABLES */
+        .table-wrapper { 
+            width: 100%; 
+            background-color: #111827; 
+            border-radius: 12px; 
+            border: 1px solid #1F2937; 
+            overflow-x: auto; 
+            margin-top: 15px; 
+            margin-bottom: 25px;
+        }
+        table { border-collapse: collapse; width: 100%; min-width: 800px; }
+        .complex-table { min-width: 1000px; } 
+        /* Змінено white-space: nowrap на normal для перенесення тексту */
+        th, td { padding: 10px 12px; text-align: center; font-size: 14px; border: 1px solid #1F2937; white-space: normal; line-height: 1.4; }
+        th { background-color: #1F2937; color: #00E5FF; font-weight: 700; border-bottom: 2px solid #374151; }
+        th.sub-header { background-color: #161e2e; color: #D1D5DB; font-size: 13px; }
+        td { font-family: monospace; font-size: 15px; }
+        tr:nth-child(even) { background-color: rgba(31, 41, 55, 0.4); }
+        tr:hover td { background-color: rgba(0, 229, 255, 0.05); }
+        
+        /* Status Colors */
+        .status-good { color: #10B981; font-weight: 700; } 
+        .status-bad { color: #EF4444; font-weight: 700; }  
+        .status-neutral { color: #F59E0B; font-weight: 700; } 
+
+        /* CHART CONTAINER */
+        .chart-container {
+            position: relative;
+            height: 450px;
+            width: 100%;
+            background-color: #111827;
+            border-radius: 12px;
+            border: 1px solid #1F2937;
+            padding: 20px;
+            margin-top: 20px;
+        }
+
+        .bullet-list { list-style: none; padding-left: 10px; }
+        .bullet-list li { margin-bottom: 15px; position: relative; padding-left: 30px; }
+        .bullet-list li i { position: absolute; left: 0; top: 5px; font-size: 18px; }
+
+        /* INLINE TERMS TOOLTIP STYLES */
+        .term {
+            position: relative;
+            cursor: help;
+            border-bottom: 1px dashed #00E5FF;
+            color: #00E5FF;
+            transition: color 0.3s ease;
+            font-weight: 600;
+        }
+        .term:hover {
+            color: #F9FAFB;
+            z-index: 100;
+        }
+        .term .term-tooltip {
+            visibility: hidden;
+            opacity: 0;
+            position: absolute;
+            /* Змінено напрямок відкриття підказки на ВНИЗ, щоб не зрізалась зверху */
+            top: 130%;
+            bottom: auto;
+            left: 50%;
+            transform: translateX(-50%) translateY(-10px);
+            background-color: #1F2937;
+            color: #D1D5DB;
+            text-align: center;
+            padding: 10px 15px;
+            border-radius: 8px;
+            width: max-content;
+            max-width: 250px;
+            font-size: 13px;
+            line-height: 1.4;
+            font-weight: normal;
+            font-family: 'Urbanist', sans-serif;
+            border: 1px solid #374151;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.8);
+            transition: all 0.3s ease;
+            pointer-events: none;
+            z-index: 1000;
+        }
+        .term .term-tooltip::after {
+            content: "";
+            position: absolute;
+            /* Стрілочка тепер зверху підказки */
+            bottom: 100%;
+            top: auto;
+            left: 50%;
+            margin-left: -8px;
+            border-width: 8px;
+            border-style: solid;
+            border-color: transparent transparent #1F2937 transparent;
+        }
+        .term:hover .term-tooltip {
+            visibility: visible;
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        /* Модифікатор для вирівнювання підказок по правому краю екрану */
+        .term.term-right .term-tooltip {
+            left: auto;
+            right: -10px;
+            transform: translateY(-10px);
+        }
+        .term.term-right:hover .term-tooltip {
+            transform: translateY(0);
+        }
+        .term.term-right .term-tooltip::after {
+            left: auto;
+            right: 20px; /* Стрілочка зміщується вправо */
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    
+    <!-- HEADER -->
+    <div style="text-align: center; padding: 10px 0;">
+        <h1>Проєкт CityTransit</h1>
+        <p style="font-size: 24px; color: #9CA3AF;">Фінансовий аналіз та <span class="term">EVM<span class="term-tooltip">Earned Value Management (Управління освоєним обсягом) - метод об'єктивного вимірювання прогресу та ефективності проєкту.</span></span> (Специфікація проєкту)</p>
+        <p>Завдання до лабораторної роботи | Виконав: <span class="term">PM<span class="term-tooltip">Project Manager - керівник проєкту, відповідальний за загальний результат та бюджет.</span></span> Кара Микита</p>
+    </div>
+
+    <!-- 1. ТЕОРЕТИЧНА ДОВІДКА -->
+    <div class="section-card">
+        <h2>1. Методологія <span><span class="term">EVM<span class="term-tooltip">Earned Value Management - світовий стандарт проектного менеджменту.</span></span></span></h2>
+        <div class="grid-2">
+            <div class="info-box" style="border-left-color: #3B82F6;">
+                <h3 style="color: #3B82F6;"><i class="fa-solid fa-calendar-check"></i> <span class="term">SPI<span class="term-tooltip">Schedule Performance Index - Індекс виконання графіка. Показує відхилення від розкладу.</span></span></h3>
+                <p><strong>Schedule Performance Index (SPI)</strong> показує, наскільки ефективно команда CityTransit використовує час відносно плану у 6 місяців.</p>
+                <p style="font-family: monospace; color: #00E5FF; font-size: 18px; margin: 10px 0;"><span class="term">SPI<span class="term-tooltip">Індекс виконання графіка</span></span> = <span class="term">EV<span class="term-tooltip">Earned Value - Освоєний обсяг</span></span> / <span class="term">PV<span class="term-tooltip">Planned Value - Плановий обсяг</span></span></p>
+                <ul class="bullet-list" style="margin-top: 10px;">
+                    <li><i class="fa-solid fa-check" style="color: #10B981;"></i> <strong>SPI > 1.0:</strong> Випередження графіка.</li>
+                    <li><i class="fa-solid fa-equals" style="color: #F59E0B;"></i> <strong>SPI = 1.0:</strong> Чітко за планом.</li>
+                    <li><i class="fa-solid fa-xmark" style="color: #EF4444;"></i> <strong>SPI < 1.0:</strong> Відставання від графіка.</li>
+                </ul>
+            </div>
+            <div class="info-box" style="border-left-color: #EF4444;">
+                <h3 style="color: #EF4444;"><i class="fa-solid fa-sack-dollar"></i> <span class="term">CPI<span class="term-tooltip">Cost Performance Index - Індекс виконання бюджету. Показує фінансову рентабельність робіт.</span></span></h3>
+                <p><strong>Cost Performance Index (CPI)</strong> показує, наскільки ефективно витрачається бюджет проєкту ($151,470).</p>
+                <p style="font-family: monospace; color: #00E5FF; font-size: 18px; margin: 10px 0;"><span class="term">CPI<span class="term-tooltip">Індекс виконання бюджету</span></span> = <span class="term">EV<span class="term-tooltip">Earned Value - Освоєний обсяг</span></span> / <span class="term">AC<span class="term-tooltip">Actual Cost - Фактичні витрати</span></span></p>
+                <ul class="bullet-list" style="margin-top: 10px;">
+                    <li><i class="fa-solid fa-check" style="color: #10B981;"></i> <strong>CPI > 1.0:</strong> Економія бюджету.</li>
+                    <li><i class="fa-solid fa-equals" style="color: #F59E0B;"></i> <strong>CPI = 1.0:</strong> В рамках бюджету.</li>
+                    <li><i class="fa-solid fa-xmark" style="color: #EF4444;"></i> <strong>CPI < 1.0:</strong> Перевитрата бюджету.</li>
+                </ul>
+            </div>
+        </div>
+        <p style="color: #9CA3AF; font-size: 14px; text-align: center; margin-top: 10px;">* Розрахунки ведуться на базі 214 <span class="term">Story Points (SP)<span class="term-tooltip">Story Points - абстрактна одиниця вимірювання складності та обсягу задач в Agile.</span></span> із Лаб №3 та бюджету $151,470 із Лаб №4. Вартість 1 SP = ~$707.80.</p>
+    </div>
+
+    <!-- 2. SCOPE BREAKDOWN FOR CITYTRANSIT -->
+    <div class="section-card">
+        <h2>2. <span class="term">Scope<span class="term-tooltip">Обсяг робіт - межі проєкту, перелік усіх запланованих функцій та задач.</span></span> - CityTransit <span>(3 Основні Напрямки)</span></h2>
+        <p style="margin-bottom: 15px;">Детальний розподіл 214 <span class="term">SP<span class="term-tooltip">Story Points - бали складності</span></span> по 3 ключовим напрямкам (Scopes) розробки на 6 місяців.</p>
+        
+        <div class="table-wrapper">
+            <table class="complex-table">
+                <thead>
+                    <tr>
+                        <th rowspan="3" style="vertical-align: middle;">Місяць<br>(Snapshot date)</th>
+                        <th colspan="4"><span class="term">Scope 1<span class="term-tooltip">Напрямок 1: Базова архітектура та адміністративна панель</span></span> – Core Backend & Admin (Epics 1, 6)</th>
+                        <th colspan="4"><span class="term">Scope 2<span class="term-tooltip">Напрямок 2: Основний клієнтський додаток та навігація</span></span> – Mobile <span class="term">MVP<span class="term-tooltip">Minimum Viable Product - мінімально життєздатний продукт.</span></span>, Routing, Pay (Epics 3, 4, 5)</th>
+                        <th colspan="4"><span class="term">Scope 3<span class="term-tooltip">Напрямок 3: Алгоритми та додатковий функціонал</span></span> – Smart ETA & Alerts (Epics 2, 7)</th>
+                        <!-- Додано клас term-right щоб підказка не вилазила за правий край екрану -->
+                        <th rowspan="3" style="vertical-align: bottom;"><span class="term term-right">Planned Value (PV)<span class="term-tooltip">Плановий обсяг (PV) - плановий бюджет для виконаних робіт станом на обрану дату.</span></span></th>
+                        <th rowspan="3" style="vertical-align: bottom;">Planned<br>Total Budget</th>
+                    </tr>
+                    <tr>
+                        <th colspan="4" class="sub-header">Scope Weight: 29% (62 SP)</th>
+                        <th colspan="4" class="sub-header">Scope Weight: 44% (95 SP)</th>
+                        <th colspan="4" class="sub-header">Scope Weight: 27% (57 SP)</th>
+                    </tr>
+                    <tr>
+                        <th class="sub-header">Actual SP</th>
+                        <th class="sub-header">Plan SP</th>
+                        <th class="sub-header">Total SP<br>in Scope</th>
+                        <th class="sub-header">Total Scope<br>Cost ($)</th>
+                        <th class="sub-header">Actual SP</th>
+                        <th class="sub-header">Plan SP</th>
+                        <th class="sub-header">Total SP<br>in Scope</th>
+                        <th class="sub-header">Total Scope<br>Cost ($)</th>
+                        <th class="sub-header">Actual SP</th>
+                        <th class="sub-header">Plan SP</th>
+                        <th class="sub-header">Total SP<br>in Scope</th>
+                        <th class="sub-header">Total Scope<br>Cost ($)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td>Month 1</td><td>20</td><td>25</td><td>62</td><td>$43,883.60</td><td>0</td><td>0</td><td>95</td><td>$67,241.00</td><td>0</td><td>0</td><td>57</td><td>$40,345.40</td><td>$17,695.00</td><td>$151,470.00</td></tr>
+                    <tr><td>Month 2</td><td>45</td><td>45</td><td>62</td><td>$43,883.60</td><td>15</td><td>20</td><td>95</td><td>$67,241.00</td><td>0</td><td>0</td><td>57</td><td>$40,345.40</td><td>$46,007.00</td><td>$151,470.00</td></tr>
+                    <tr><td>Month 3</td><td>62</td><td>62</td><td>62</td><td>$43,883.60</td><td>45</td><td>50</td><td>95</td><td>$67,241.00</td><td>10</td><td>5</td><td>57</td><td>$40,345.40</td><td>$82,812.60</td><td>$151,470.00</td></tr>
+                    <tr><td>Month 4</td><td>62</td><td>62</td><td>62</td><td>$43,883.60</td><td>80</td><td>80</td><td>95</td><td>$67,241.00</td><td>25</td><td>30</td><td>57</td><td>$40,345.40</td><td>$121,741.60</td><td>$151,470.00</td></tr>
+                    <tr><td>Month 5</td><td>62</td><td>62</td><td>62</td><td>$43,883.60</td><td>95</td><td>95</td><td>95</td><td>$67,241.00</td><td>50</td><td>45</td><td>57</td><td>$40,345.40</td><td>$142,975.60</td><td>$151,470.00</td></tr>
+                    <tr><td>Month 6</td><td>62</td><td>62</td><td>62</td><td>$43,883.60</td><td>95</td><td>95</td><td>95</td><td>$67,241.00</td><td>57</td><td>57</td><td>57</td><td>$40,345.40</td><td>$151,470.00</td><td>$151,470.00</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- 3. SCOPE INDICATORS -->
+    <div class="section-card">
+        <h2>3. <span class="term">Scope<span class="term-tooltip">Обсяг робіт - межі проєкту, перелік усіх запланованих функцій та задач.</span></span> Indicators <span>(CityTransit Story Points)</span></h2>
+        
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Місяць</th>
+                        <th>Actual <span class="term">SP<span class="term-tooltip">Story Points - реалізовані бали складності</span></span> Completed</th>
+                        <th>Planned <span class="term">SP<span class="term-tooltip">Story Points - заплановані бали складності</span></span></th>
+                        <th>Actual %<br>(from Total)</th>
+                        <th>Planned %<br>(from Total)</th>
+                        <th>Variance<br>(Actual - Plan)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td>Month 1</td><td>20</td><td>25</td><td>9.34%</td><td>11.68%</td><td class="status-bad">-2.34%</td></tr>
+                    <tr><td>Month 2</td><td>60</td><td>65</td><td>28.03%</td><td>30.37%</td><td class="status-bad">-2.34%</td></tr>
+                    <tr><td>Month 3</td><td>117</td><td>117</td><td>54.67%</td><td>54.67%</td><td class="status-neutral">0.00%</td></tr>
+                    <tr><td>Month 4</td><td>167</td><td>172</td><td>78.03%</td><td>80.37%</td><td class="status-bad">-2.34%</td></tr>
+                    <tr><td>Month 5</td><td>207</td><td>202</td><td>96.72%</td><td>94.39%</td><td class="status-good">+2.33%</td></tr>
+                    <tr><td>Month 6</td><td>214</td><td>214</td><td>100.00%</td><td>100.00%</td><td class="status-neutral">0.00%</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- 4. PERFORMANCE INDICATORS & CHART -->
+    <div class="section-card">
+        <h2>4. Performance Indicators <span>(<span class="term">EVM<span class="term-tooltip">Earned Value Management (Управління освоєним обсягом)</span></span> Аналітика)</span></h2>
+        
+        <div style="display: flex; flex-direction: column; gap: 30px;">
+            <!-- Таблиця даних -->
+            <div class="table-wrapper" style="margin-top: 20px;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th><span class="term">Planned Value (PV)<span class="term-tooltip">Плановий обсяг - бюджет робіт, які мали бути виконані за планом на цей момент.</span></span></th>
+                            <th><span class="term">Earned Value (EV)<span class="term-tooltip">Освоєний обсяг - фінансова цінність реально виконаної роботи.</span></span></th>
+                            <th><span class="term">Actual Cost (AC)<span class="term-tooltip">Фактичні витрати - сума реально витрачених грошей на цей момент.</span></span></th>
+                            <th><span class="term term-right">CPI<span class="term-tooltip">Cost Performance Index - індекс ефективності бюджету (EV / AC).</span></span> (Бюджет)</th>
+                            <th><span class="term term-right">SPI<span class="term-tooltip">Schedule Performance Index - індекс виконання розкладу (EV / PV).</span></span> (Графік)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="dataTableBody">
+                        <!-- Дані генеруються через JS -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Графік Chart.js -->
+            <div class="chart-container">
+                <canvas id="performanceChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- 5. АНАЛІЗ -->
+    <div class="section-card">
+        <h2>5. Аналіз <span>Отриманих Результатів CityTransit</span></h2>
+        
+        <div class="card" style="margin-bottom: 20px; border-left: 4px solid #3B82F6;">
+            <h3 style="color: #3B82F6;"><i class="fa-solid fa-clock"></i> Оцінка виконання графіка (<span class="term">SPI<span class="term-tooltip">Schedule Performance Index - показує відхилення від графіка.</span></span>)</h3>
+            <p><strong>Динаміка розробки:</strong> Проєкт тривав 6 місяців і завершився рівно за графіком <strong>(<span class="term">SPI<span class="term-tooltip">Індекс виконання графіка</span></span> = 1.00)</strong>.</p>
+            <ul style="padding-left: 20px; margin-top: 10px; color: #D1D5DB;">
+                <li><strong>Місяці 1-2 (Затримка):</strong> Команда відставала від графіка (<span class="term">SPI<span class="term-tooltip">Індекс виконання графіка</span></span> = 0.80 - 0.92). Це було викликано складністю налаштування архітектури бази даних (<span class="term">Scope 1<span class="term-tooltip">Напрямок 1: Базова архітектура</span></span>) та початковим збором вимог від міської влади.</li>
+                <li><strong>Місяць 3 (Прорив):</strong> Після налаштування середовища розробка мобільного додатку та <span class="term">API<span class="term-tooltip">Application Programming Interface - механізм взаємодії бекенду та додатку.</span></span> пішла дуже швидко. Команда закрила 117 <span class="term">SP<span class="term-tooltip">Story Points - бали складності задач</span></span> і повністю наздогнала план (SPI = 1.00).</li>
+                <li><strong>Місяці 4-6 (Стабілізація):</strong> Завдяки ефективному <span class="term">Agile<span class="term-tooltip">Гнучка методологія розробки - підхід з роботою короткими ітераціями (спринтами).</span></span>-спринтуванню, проєкт витримував планові темпи і навіть випереджав графік у 5-му місяці (SPI = 1.02), що дозволило спокійно провести фінальне тестування (<span class="term">QA<span class="term-tooltip">Quality Assurance - контроль якості (тестування).</span></span>).</li>
+            </ul>
+        </div>
+
+        <div class="card" style="margin-bottom: 20px; border-left: 4px solid #10B981;">
+            <h3 style="color: #10B981;"><i class="fa-solid fa-money-bill-trend-up"></i> Оцінка ефективності бюджету (<span class="term">CPI<span class="term-tooltip">Cost Performance Index - показує фінансову ефективність.</span></span>)</h3>
+            <p><strong>Фінансова успішність:</strong> Проєкт завершився з високою рентабельністю та економією бюджету <strong>(<span class="term">CPI<span class="term-tooltip">Індекс виконання бюджету</span></span> = 1.06)</strong>.</p>
+            <ul style="padding-left: 20px; margin-top: 10px; color: #D1D5DB;">
+                <li><strong>Місяці 1-2 (Перевитрати):</strong> На старті фінансові показники були нижчими за норму (<span class="term">CPI<span class="term-tooltip">Індекс виконання бюджету</span></span> = 0.88 - 0.94). <span class="term">Actual Cost (AC)<span class="term-tooltip">Фактичні витрати</span></span> перевищував <span class="term">Earned Value (EV)<span class="term-tooltip">Освоєний обсяг - цінність створеної роботи</span></span> через високі початкові інвестиції в інфраструктуру та ліцензії.</li>
+                <li><strong>Місяці 3-6 (Економія):</strong> Починаючи з 3-го місяця, індекс <span class="term">CPI<span class="term-tooltip">Індекс виконання бюджету</span></span> стабільно тримався вище одиниці (1.03 - 1.08). Це стало можливим завдяки тому, що Backend-розробники використовували готові open-source бібліотеки для маршрутизації замість написання коду з нуля.</li>
+                <li><strong>Фінальний результат:</strong> За планового бюджету $151,470 (<span class="term">PV<span class="term-tooltip">Planned Value (Плановий обсяг)</span></span>), фактичні витрати (<span class="term">AC<span class="term-tooltip">Actual Cost (Фактичні витрати)</span></span>) склали $143,000, зберігши команді понад $8,400.</li>
+            </ul>
+        </div>
+
+        <div class="card" style="border-left: 4px solid #F59E0B;">
+            <h3 style="color: #F59E0B;"><i class="fa-solid fa-chart-line"></i> Загальні висновки для <span class="term">PM<span class="term-tooltip">Project Manager - керівник проєкту.</span></span></h3>
+            <p>Управлінська методологія <span class="term">EVM<span class="term-tooltip">Earned Value Management (Управління освоєним обсягом)</span></span> чудово показала себе на проєкті CityTransit:</p>
+            <ul class="bullet-list" style="margin-top: 15px;">
+                <li><i class="fa-solid fa-arrow-right" style="color: #F59E0B;"></i> <strong>Управління ризиками:</strong> Завдяки щомісячному відстеженню, відставання на старті (Місяць 1) було одразу виявлено, що дозволило <span class="term">PM<span class="term-tooltip">Project Manager</span></span>-у перерозподілити ресурси та вирівняти ситуацію вже до 3-го місяця.</li>
+                <li><i class="fa-solid fa-arrow-right" style="color: #F59E0B;"></i> Модель <strong><span class="term">Fixed Price<span class="term-tooltip">Модель ціноутворення з фіксованою вартістю контракту до початку робіт.</span></span></strong> виправдала себе. Ризики виконавця на старті (перевитрати) були перекриті високою швидкістю команди у другій половині проєкту.</li>
+            </ul>
+        </div>
+
+    </div>
+</div>
+
+<script>
+    // Згенеровані дані EVM конкретно для проєкту CityTransit (на 6 місяців, Бюджет $151k, SP 214)
+    const projectData = [
+        { month: 'Month 1', pv: 17695, ev: 14156, ac: 16000, cpi: 0.88, spi: 0.80 },
+        { month: 'Month 2', pv: 46007, ev: 42468, ac: 45000, cpi: 0.94, spi: 0.92 },
+        { month: 'Month 3', pv: 82812, ev: 82812, ac: 80000, cpi: 1.03, spi: 1.00 },
+        { month: 'Month 4', pv: 121741, ev: 118202, ac: 110000, cpi: 1.07, spi: 0.97 },
+        { month: 'Month 5', pv: 142975, ev: 146514, ac: 135000, cpi: 1.08, spi: 1.02 },
+        { month: 'Month 6', pv: 151470, ev: 151470, ac: 143000, cpi: 1.06, spi: 1.00 }
+    ];
+
+    // Функція визначення кольору
+    function getStatusClass(value) {
+        if (value > 1.0) return 'status-good';
+        if (value < 1.0) return 'status-bad';
+        return 'status-neutral';
+    }
+
+    // Заповнення таблиці
+    const tbody = document.getElementById('dataTableBody');
+    projectData.forEach(row => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>$${row.pv.toLocaleString('en-US')}</td>
+            <td>$${row.ev.toLocaleString('en-US')}</td>
+            <td style="color: #9CA3AF;">$${row.ac.toLocaleString('en-US')}</td>
+            <td class="${getStatusClass(row.cpi)}">${row.cpi.toFixed(2)}</td>
+            <td class="${getStatusClass(row.spi)}">${row.spi.toFixed(2)}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+
+    // Підготовка даних для графіка
+    const labels = projectData.map(d => d.month);
+    const cpiData = projectData.map(d => d.cpi);
+    const spiData = projectData.map(d => d.spi);
+    const baselineData = Array(6).fill(1.0);
+
+    // Побудова графіка
+    const ctx = document.getElementById('performanceChart').getContext('2d');
+    Chart.defaults.color = '#9CA3AF';
+    Chart.defaults.font.family = "'Urbanist', sans-serif";
+
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'CPI (Бюджет)',
+                    data: cpiData,
+                    borderColor: '#EF4444', 
+                    backgroundColor: 'rgba(239, 68, 68, 0.2)',
+                    borderWidth: 3,
+                    pointBackgroundColor: '#0B0F19',
+                    pointBorderColor: '#EF4444',
+                    pointBorderWidth: 2,
+                    pointRadius: 5,
+                    pointHoverRadius: 7,
+                    tension: 0.3 
+                },
+                {
+                    label: 'SPI (Графік)',
+                    data: spiData,
+                    borderColor: '#3B82F6', 
+                    backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                    borderWidth: 3,
+                    pointBackgroundColor: '#0B0F19',
+                    pointBorderColor: '#3B82F6',
+                    pointBorderWidth: 2,
+                    pointRadius: 5,
+                    pointHoverRadius: 7,
+                    tension: 0.3
+                },
+                {
+                    label: 'Базовий План (=1.0)',
+                    data: baselineData,
+                    borderColor: '#F59E0B', 
+                    borderWidth: 2,
+                    borderDash: [5, 5], 
+                    pointRadius: 0, 
+                    fill: false
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                mode: 'index',
+                intersect: false,
+            },
+            plugins: {
+                legend: {
+                    position: 'top',
+                    labels: { padding: 20, usePointStyle: true, boxWidth: 8 }
+                },
+                tooltip: {
+                    backgroundColor: '#1F2937',
+                    titleFont: { size: 14 },
+                    bodyFont: { size: 14, family: 'monospace' },
+                    padding: 12,
+                    borderColor: '#374151',
+                    borderWidth: 1
+                }
+            },
+            scales: {
+                y: {
+                    min: 0.7,
+                    max: 1.2,
+                    grid: { color: '#1F2937', drawBorder: false },
+                    ticks: { stepSize: 0.1, callback: function(value) { return value.toFixed(2); } }
+                },
+                x: { grid: { color: '#1F2937', drawBorder: false } }
+            }
+        }
+    });
+</script>
+
+</body>
+</html>
