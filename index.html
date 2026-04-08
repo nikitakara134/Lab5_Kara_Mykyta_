@@ -81,7 +81,6 @@
         }
         table { border-collapse: collapse; width: 100%; min-width: 800px; }
         .complex-table { min-width: 1000px; } 
-        /* Змінено white-space: nowrap на normal для перенесення тексту */
         th, td { padding: 10px 12px; text-align: center; font-size: 14px; border: 1px solid #1F2937; white-space: normal; line-height: 1.4; }
         th { background-color: #1F2937; color: #00E5FF; font-weight: 700; border-bottom: 2px solid #374151; }
         th.sub-header { background-color: #161e2e; color: #D1D5DB; font-size: 13px; }
@@ -103,7 +102,7 @@
             border-radius: 12px;
             border: 1px solid #1F2937;
             padding: 20px;
-            margin-top: 20px;
+            margin-top: 10px;
         }
 
         .bullet-list { list-style: none; padding-left: 10px; }
@@ -127,7 +126,6 @@
             visibility: hidden;
             opacity: 0;
             position: absolute;
-            /* Змінено напрямок відкриття підказки на ВНИЗ, щоб не зрізалась зверху */
             top: 130%;
             bottom: auto;
             left: 50%;
@@ -152,7 +150,6 @@
         .term .term-tooltip::after {
             content: "";
             position: absolute;
-            /* Стрілочка тепер зверху підказки */
             bottom: 100%;
             top: auto;
             left: 50%;
@@ -167,7 +164,6 @@
             transform: translateX(-50%) translateY(0);
         }
 
-        /* Модифікатор для вирівнювання підказок по правому краю екрану */
         .term.term-right .term-tooltip {
             left: auto;
             right: -10px;
@@ -178,7 +174,7 @@
         }
         .term.term-right .term-tooltip::after {
             left: auto;
-            right: 20px; /* Стрілочка зміщується вправо */
+            right: 20px;
         }
     </style>
 </head>
@@ -234,7 +230,6 @@
                         <th colspan="4"><span class="term">Scope 1<span class="term-tooltip">Напрямок 1: Базова архітектура та адміністративна панель</span></span> – Core Backend & Admin (Epics 1, 6)</th>
                         <th colspan="4"><span class="term">Scope 2<span class="term-tooltip">Напрямок 2: Основний клієнтський додаток та навігація</span></span> – Mobile <span class="term">MVP<span class="term-tooltip">Minimum Viable Product - мінімально життєздатний продукт.</span></span>, Routing, Pay (Epics 3, 4, 5)</th>
                         <th colspan="4"><span class="term">Scope 3<span class="term-tooltip">Напрямок 3: Алгоритми та додатковий функціонал</span></span> – Smart ETA & Alerts (Epics 2, 7)</th>
-                        <!-- Додано клас term-right щоб підказка не вилазила за правий край екрану -->
                         <th rowspan="3" style="vertical-align: bottom;"><span class="term term-right">Planned Value (PV)<span class="term-tooltip">Плановий обсяг (PV) - плановий бюджет для виконаних робіт станом на обрану дату.</span></span></th>
                         <th rowspan="3" style="vertical-align: bottom;">Planned<br>Total Budget</th>
                     </tr>
@@ -298,13 +293,13 @@
         </div>
     </div>
 
-    <!-- 4. PERFORMANCE INDICATORS & CHART -->
+    <!-- 4. PERFORMANCE INDICATORS & CHARTS -->
     <div class="section-card">
         <h2>4. Performance Indicators <span>(<span class="term">EVM<span class="term-tooltip">Earned Value Management (Управління освоєним обсягом)</span></span> Аналітика)</span></h2>
         
         <div style="display: flex; flex-direction: column; gap: 30px;">
             <!-- Таблиця даних -->
-            <div class="table-wrapper" style="margin-top: 20px;">
+            <div class="table-wrapper" style="margin-top: 20px; margin-bottom: 0;">
                 <table>
                     <thead>
                         <tr>
@@ -321,9 +316,20 @@
                 </table>
             </div>
 
-            <!-- Графік Chart.js -->
-            <div class="chart-container">
-                <canvas id="performanceChart"></canvas>
+            <!-- Перший графік Chart.js (Індекси) -->
+            <div>
+                <h3 style="text-align: center; margin-bottom: 5px; color: #D1D5DB;">Динаміка індексів ефективності (CPI та SPI)</h3>
+                <div class="chart-container" style="margin-top: 0;">
+                    <canvas id="performanceChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Другий графік Chart.js (Витрати EV/PV/AC) -->
+            <div>
+                <h3 style="text-align: center; margin-bottom: 5px; color: #D1D5DB;">Аналіз фінансових обсягів (EV, PV, AC)</h3>
+                <div class="chart-container" style="margin-top: 0;">
+                    <canvas id="valueChart"></canvas>
+                </div>
             </div>
         </div>
     </div>
@@ -387,27 +393,41 @@
     projectData.forEach(row => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
-            <td>$${row.pv.toLocaleString('en-US')}</td>
-            <td>$${row.ev.toLocaleString('en-US')}</td>
-            <td style="color: #9CA3AF;">$${row.ac.toLocaleString('en-US')}</td>
+            <td style="color: #3B82F6;">$${row.pv.toLocaleString('en-US')}</td>
+            <td style="color: #10B981;">$${row.ev.toLocaleString('en-US')}</td>
+            <td style="color: #EF4444;">$${row.ac.toLocaleString('en-US')}</td>
             <td class="${getStatusClass(row.cpi)}">${row.cpi.toFixed(2)}</td>
             <td class="${getStatusClass(row.spi)}">${row.spi.toFixed(2)}</td>
         `;
         tbody.appendChild(tr);
     });
 
-    // Підготовка даних для графіка
+    // Підготовка даних для графіків
     const labels = projectData.map(d => d.month);
     const cpiData = projectData.map(d => d.cpi);
     const spiData = projectData.map(d => d.spi);
     const baselineData = Array(6).fill(1.0);
+    
+    // Дані для другого графіка (EV, PV, AC)
+    const pvData = projectData.map(d => d.pv);
+    const evData = projectData.map(d => d.ev);
+    const acData = projectData.map(d => d.ac);
 
-    // Побудова графіка
-    const ctx = document.getElementById('performanceChart').getContext('2d');
+    // Загальні налаштування Chart.js
     Chart.defaults.color = '#9CA3AF';
     Chart.defaults.font.family = "'Urbanist', sans-serif";
+    const commonTooltipOpts = {
+        backgroundColor: '#1F2937',
+        titleFont: { size: 14 },
+        bodyFont: { size: 14, family: 'monospace' },
+        padding: 12,
+        borderColor: '#374151',
+        borderWidth: 1
+    };
 
-    new Chart(ctx, {
+    // --- ГРАФІК 1: ІНДЕКСИ (CPI / SPI) ---
+    const ctxIndex = document.getElementById('performanceChart').getContext('2d');
+    new Chart(ctxIndex, {
         type: 'line',
         data: {
             labels: labels,
@@ -452,30 +472,99 @@
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            interaction: {
-                mode: 'index',
-                intersect: false,
-            },
+            interaction: { mode: 'index', intersect: false },
             plugins: {
-                legend: {
-                    position: 'top',
-                    labels: { padding: 20, usePointStyle: true, boxWidth: 8 }
+                legend: { position: 'top', labels: { padding: 20, usePointStyle: true, boxWidth: 8 } },
+                tooltip: commonTooltipOpts
+            },
+            scales: {
+                y: {
+                    min: 0.7, max: 1.2,
+                    grid: { color: '#1F2937', drawBorder: false },
+                    ticks: { stepSize: 0.1, callback: function(value) { return value.toFixed(2); } }
                 },
+                x: { grid: { color: '#1F2937', drawBorder: false } }
+            }
+        }
+    });
+
+    // --- ГРАФІК 2: ОБСЯГИ ТА ВИТРАТИ (EV, PV, AC) ---
+    const ctxValue = document.getElementById('valueChart').getContext('2d');
+    new Chart(ctxValue, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Planned Value (PV)',
+                    data: pvData,
+                    borderColor: '#3B82F6', // Blue
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    borderWidth: 3,
+                    pointBackgroundColor: '#0B0F19',
+                    pointBorderColor: '#3B82F6',
+                    pointBorderWidth: 2,
+                    pointRadius: 5,
+                    pointHoverRadius: 7,
+                    tension: 0.3
+                },
+                {
+                    label: 'Earned Value (EV)',
+                    data: evData,
+                    borderColor: '#10B981', // Green
+                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                    borderWidth: 3,
+                    pointBackgroundColor: '#0B0F19',
+                    pointBorderColor: '#10B981',
+                    pointBorderWidth: 2,
+                    pointRadius: 5,
+                    pointHoverRadius: 7,
+                    tension: 0.3
+                },
+                {
+                    label: 'Actual Cost (AC)',
+                    data: acData,
+                    borderColor: '#EF4444', // Red
+                    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                    borderWidth: 3,
+                    pointBackgroundColor: '#0B0F19',
+                    pointBorderColor: '#EF4444',
+                    pointBorderWidth: 2,
+                    pointRadius: 5,
+                    pointHoverRadius: 7,
+                    tension: 0.3
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { position: 'top', labels: { padding: 20, usePointStyle: true, boxWidth: 8 } },
                 tooltip: {
-                    backgroundColor: '#1F2937',
-                    titleFont: { size: 14 },
-                    bodyFont: { size: 14, family: 'monospace' },
-                    padding: 12,
-                    borderColor: '#374151',
-                    borderWidth: 1
+                    ...commonTooltipOpts,
+                    callbacks: {
+                        label: function(context) {
+                            let label = context.dataset.label || '';
+                            if (label) { label += ': '; }
+                            if (context.parsed.y !== null) {
+                                label += new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(context.parsed.y);
+                            }
+                            return label;
+                        }
+                    }
                 }
             },
             scales: {
                 y: {
-                    min: 0.7,
-                    max: 1.2,
+                    beginAtZero: true,
                     grid: { color: '#1F2937', drawBorder: false },
-                    ticks: { stepSize: 0.1, callback: function(value) { return value.toFixed(2); } }
+                    ticks: {
+                        callback: function(value) {
+                            return '$' + value.toLocaleString(); // Форматування осі Y в доларах
+                        }
+                    }
                 },
                 x: { grid: { color: '#1F2937', drawBorder: false } }
             }
